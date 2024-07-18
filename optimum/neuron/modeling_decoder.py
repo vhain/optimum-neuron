@@ -42,7 +42,7 @@ MAJORS_FILE = "/proc/devices"
 NEURON_MAJOR_LINE = re.compile(r"^\s*(\d+)\s+neuron\s*$")
 
 if is_transformers_neuronx_available():
-    from transformers_neuronx.config import ContinuousBatchingConfig, NeuronConfig
+    from transformers_neuronx.config import ContinuousBatchingConfig, NeuronConfig, QuantizationConfig
 
 
 if TYPE_CHECKING:
@@ -177,11 +177,16 @@ class NeuronDecoderModel(NeuronModel):
             "amp": auto_cast_type.replace("p", ""),
         }
         if batch_size > 1 and exporter.continuous_batching:
+            logger.info("Continuous batching enabled with s8 quantization.")
             # Continuous batching is always enabled for models that support it because static batching
             # is broken for these models:  see https://github.com/aws-neuron/transformers-neuronx/issues/79
             tnx_kwargs["neuron_config"] = NeuronConfig(
                 continuous_batching=ContinuousBatchingConfig(batch_size_for_shared_caches=batch_size),
                 attention_layout=exporter.attention_layout,
+                quant=QuantizationConfig(
+                    quant_dtype="s8",
+                    dequant_dtype=auto_cast_type.replace("p", ""),
+                ),
             )
             tnx_kwargs["n_positions"] = [sequence_length]
             tnx_kwargs["context_length_estimate"] = [sequence_length]
