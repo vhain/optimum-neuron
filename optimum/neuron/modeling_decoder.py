@@ -58,6 +58,16 @@ def get_exporter(config, task):
     )()
 
 
+def power_of_two_bucket_sizes(min_bucket_size, max_bucket_size):
+    sizes = []
+    bucket_size = min_bucket_size
+    while bucket_size < max_bucket_size:
+        sizes.append(bucket_size)
+        bucket_size *= 2
+    sizes.append(max_bucket_size)
+    return sizes
+
+
 # Note: with python 3.9, functools.cache would be more suited
 @functools.lru_cache()
 def get_neuron_major() -> int:
@@ -170,14 +180,16 @@ class NeuronDecoderModel(NeuronModel):
 
         exporter = get_exporter(config, task)
 
+        # transformers-neuronx uses f32/f16 instead of fp32/fp16
+        transformers_neuronx_dtype = auto_cast_type.replace("p", "")
+
         tnx_kwargs = {
             "batch_size": batch_size,
             "tp_degree": num_cores,
-            # transformers-neuronx uses f32/f16 instead of fp32/fp16
-            "amp": auto_cast_type.replace("p", ""),
+            "amp": transformers_neuronx_dtype,
         }
         if batch_size > 1 and exporter.continuous_batching:
-            logger.info("Continuous batching enabled with s8 quantization.")
+            logger.info("Continuous batching enabled with s8 <> {} quantization.", transformers_neuronx_dtype)
             # Continuous batching is always enabled for models that support it because static batching
             # is broken for these models:  see https://github.com/aws-neuron/transformers-neuronx/issues/79
             tnx_kwargs["neuron_config"] = NeuronConfig(
@@ -185,11 +197,13 @@ class NeuronDecoderModel(NeuronModel):
                 attention_layout=exporter.attention_layout,
                 quant=QuantizationConfig(
                     quant_dtype="s8",
-                    dequant_dtype=auto_cast_type.replace("p", ""),
+                    dequant_dtype=transformers_neuronx_dtype,
                 ),
             )
-            tnx_kwargs["n_positions"] = [sequence_length]
-            tnx_kwargs["context_length_estimate"] = [sequence_length]
+            # tnx_kwargs["n_positions"] = [sequence_length]
+            # tnx_kwargs["context_length_estimate"] = [sequence_length]
+            tnx_kwargs["n_positions"] = [128, 256, 512, 1024, 2048, 4096]
+            tnx_kwargs["context_length_estimate"] = [64, 128, 256, 512, 1024, 1536, 2048, 3072]
         else:
             tnx_kwargs["neuron_config"] = NeuronConfig(attention_layout=exporter.attention_layout)
             tnx_kwargs["n_positions"] = sequence_length
@@ -452,9 +466,10 @@ class NeuronDecoderModel(NeuronModel):
 
         neuron_config = getattr(self.config, "neuron")
         checkpoint_id = neuron_config.get("checkpoint_id", None)
-        if checkpoint_id is None:
+        # if checkpoint_id is None:
             # Model was exported from a local path, so we need to save the checkpoint
-            shutil.copytree(self.checkpoint_dir, dst_checkpoint_path, dirs_exist_ok=True)
+        shutil.rmtree(dst_checkpoint_path, ignore_errors=True)
+        shutil.move(self.checkpoint_dir.name if isinstance(self.checkpoint_dir, TemporaryDirectory) else self.checkpoint_dir, dst_checkpoint_path)
         self.checkpoint_dir = dst_checkpoint_path
 
         # Save or create compiled directory
@@ -462,7 +477,8 @@ class NeuronDecoderModel(NeuronModel):
             # The compilation artifacts have never been saved, do it now
             self.model.save(dst_compiled_path)
         else:
-            shutil.copytree(self.compiled_dir, dst_compiled_path)
+            shutil.rmtree(dst_compiled_path, ignore_errors=True)
+            shutil.move(self.compiled_dir.name if isinstance(self.compiled_dir, TemporaryDirectory) else self.compiled_dir, dst_compiled_path)
         self.compiled_dir = dst_compiled_path
         self.generation_config.save_pretrained(save_directory)
 
