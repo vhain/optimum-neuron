@@ -190,10 +190,8 @@ class NeuronDecoderModel(NeuronModel):
                     dequant_dtype=transformers_neuronx_dtype,
                 ),
             )
-            # tnx_kwargs["n_positions"] = [sequence_length]
-            tnx_kwargs["n_positions"] = [4096]
-            # tnx_kwargs["context_length_estimate"] = [sequence_length]
-            tnx_kwargs["context_length_estimate"] = [3072]
+            tnx_kwargs["n_positions"] = [sequence_length]
+            tnx_kwargs["context_length_estimate"] = [sequence_length]
         else:
             tnx_kwargs["neuron_config"] = NeuronConfig(attention_layout=exporter.attention_layout)
             tnx_kwargs["n_positions"] = sequence_length
