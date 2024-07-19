@@ -58,16 +58,6 @@ def get_exporter(config, task):
     )()
 
 
-def power_of_two_bucket_sizes(min_bucket_size, max_bucket_size):
-    sizes = []
-    bucket_size = min_bucket_size
-    while bucket_size < max_bucket_size:
-        sizes.append(bucket_size)
-        bucket_size *= 2
-    sizes.append(max_bucket_size)
-    return sizes
-
-
 # Note: with python 3.9, functools.cache would be more suited
 @functools.lru_cache()
 def get_neuron_major() -> int:
@@ -201,9 +191,9 @@ class NeuronDecoderModel(NeuronModel):
                 ),
             )
             # tnx_kwargs["n_positions"] = [sequence_length]
+            tnx_kwargs["n_positions"] = [4096]
             # tnx_kwargs["context_length_estimate"] = [sequence_length]
-            tnx_kwargs["n_positions"] = [128, 256, 512, 1024, 2048, 4096]
-            tnx_kwargs["context_length_estimate"] = [64, 128, 256, 512, 1024, 1536, 2048, 3072]
+            tnx_kwargs["context_length_estimate"] = [3072]
         else:
             tnx_kwargs["neuron_config"] = NeuronConfig(attention_layout=exporter.attention_layout)
             tnx_kwargs["n_positions"] = sequence_length
